@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Vagmitra: an assistive voice-driven intake system for public digital portals.">
+  <title>Vagmitra | Voice Intake Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- Libraries used by the document and PDF modules. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Vagmitra home"><span class="brand-mark">V</span><span>vagmitra</span></a>
+    <span class="topbar-note">A voice-first form assistant</span>
+    <span class="secure-label"><span class="secure-dot"></span> Your session stays on this device</span>
+  </header>
+
+  <main class="page-shell">
+    <section class="hero">
+      <div class="eyebrow">PUBLIC PORTAL · MADE MORE ACCESSIBLE</div>
+      <h1>Forms should be simple.<br><span>Let’s do this together.</span></h1>
+      <p class="hero-copy">Answer one question at a time. Speak or type your response, review everything, and create a copy of your completed intake form.</p>
+      <div class="hero-pills"><span>🎙 Voice assisted</span><span>♿ Accessible by design</span><span>🔒 Privacy conscious</span></div>
+    </section>
+
+    <section class="workspace" aria-label="Intake assistant">
+      <aside class="progress-panel">
+        <div class="progress-heading">YOUR JOURNEY <span id="progress-count">0 / 6</span></div>
+        <div class="progress-track"><div id="progress-fill"></div></div>
+        <ol class="step-list" id="step-list">
+          <li class="active"><span>1</span><div><b>Personal details</b><small>Who are you?</small></div></li>
+          <li><span>2</span><div><b>Contact details</b><small>How can we reach you?</small></div></li>
+          <li><span>3</span><div><b>Address</b><small>Where do you live?</small></div></li>
+          <li><span>4</span><div><b>Application</b><small>What do you need?</small></div></li>
+          <li><span>5</span><div><b>Documents</b><small>Optional supporting files</small></div></li>
+          <li><span>6</span><div><b>Review</b><small>Check before finishing</small></div></li>
+        </ol>
+        <div class="privacy-card"><span>🔐</span><div><b>Your information matters</b><p>Demo data is kept in this browser session. It is not sent to a server.</p></div></div>
+      </aside>
+
+      <section class="assistant-panel">
+        <div class="assistant-top"><div class="assistant-avatar">V</div><div><b>Vagmitra assistant</b><small><span class="online-dot"></span> Ready to help</small></div><button id="restart-btn" class="text-button" type="button">Start over</button></div>
+        <div id="step-content" class="step-content" aria-live="polite"></div>
+        <div class="assistant-footer"><span id="status-message">You can type or use your voice.</span><span>STEP-BY-STEP INTAKE</span></div>
+      </section>
+    </section>
+    <footer class="page-footer">Vagmitra · Assistive Voice-Driven Intake System <span>Prototype for demonstration</span></footer>
+  </main>
+
+  <script src="js/questions.js"></script>
+  <script src="js/normalization.js"></script>
+  <script src="js/validation.js"></script>
+  <script src="js/speech.js"></script>
+  <script src="js/document.js"></script>
+  <script src="js/pdf-generator.js"></script>
+  <script src="js/dialogue.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
