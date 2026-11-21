@@ -318,86 +318,72 @@ function renderReview() {
   };
 }
   
-function renderLanguageSelection() {
+
+function renderQuestion() {
+  updateProgress();
+  const q = dialogue.current();
+  if (!q) return renderDocuments();
+
+  const currentValue = dialogue.answers[q.id] || "";
+  let field = "";
+
+  if (q.type === "textarea") {
+    field = `<textarea class="field" id="answer-input" rows="3"
+      placeholder="${esc(q.placeholder)}">${esc(currentValue)}</textarea>`;
+  } else if (q.type === "select") {
+    field = `<select class="field" id="answer-input">
+      <option value="">${esc(q.placeholder)}</option>
+      ${q.options.map(o => `<option ${currentValue === o ? "selected" : ""}>${esc(o)}</option>`).join("")}
+    </select>`;
+  } else {
+    field = `<input class="field" id="answer-input" type="${q.type}"
+      value="${esc(currentValue)}"
+      placeholder="${esc(q.placeholder || "")}"
+      ${q.autocomplete ? `autocomplete="${q.autocomplete}"` : ""}>`;
+  }
+
   content.innerHTML =
     header(
-      "WELCOME TO VAGMITRA",
-      "Which language would you like to use?",
-      "You can speak English, Hindi or Kannada to choose your language."
+      `STEP ${q.step} · ${esc(q.title.toUpperCase())}`,
+      q.prompt,
+      "You can type your answer or use the microphone. You can review your answers before finishing."
     ) +
     `<div class="question-card">
-      <p>Say one of these languages:</p>
-      <p><strong>English, Hindi or Kannada</strong></p>
+      <label for="answer-input">${esc(q.label)} ${q.required ? '<span style="color:#b54747">*</span>' : ""}</label>
+      ${field}
+      <div class="field-error" id="field-error"></div>
+      <div class="field-hint">${q.required ? "Required field" : "Optional field"}</div>
     </div>
     <div class="action-row">
-      <button class="btn btn-primary" id="start-language-btn">
-        Start Voice Assistant
-      </button>
+      <button class="btn btn-primary" id="continue-btn">Continue →</button>
+      <button class="btn btn-voice" id="voice-btn">🎤 Speak answer</button>
+      <button class="btn btn-secondary" id="read-btn">🔊 Read question</button>
+      ${dialogue.index > 0 ? '<button class="btn btn-secondary" id="back-btn">← Back</button>' : ""}
     </div>
-    <div class="voice-state" id="language-status">
-      Press Start Voice Assistant and speak your choice.
-    </div>`;
+    <div class="voice-state" id="voice-state"></div>`;
 
-  document.getElementById("start-language-btn").onclick = () => {
-    const languageStatus = document.getElementById("language-status");
-    languageStatus.textContent = "Listening... Please say English, Hindi or Kannada.";
+  document.getElementById("continue-btn").onclick = saveAndContinue;
+  document.getElementById("voice-btn").onclick = startVoice;
+  document.getElementById("read-btn").onclick = () => window.VagmitraSpeech.speak(q.prompt);
 
-    window.VagmitraSpeech.listen(
-      transcript => {
-        const spoken = transcript.toLowerCase().trim();
-        let languageCode = "";
-        let greeting = "";
-
-        if (
-          spoken.includes("kannada") ||
-          spoken.includes("ಕನ್ನಡ")
-        ) {
-          languageCode = "kn-IN";
-          greeting = "ವಂದನೆಗಳು. ವಾಗ್ಮಿತ್ರಕ್ಕೆ ಸ್ವಾಗತ.";
-        } else if (
-          spoken.includes("hindi") ||
-          spoken.includes("हिंदी") ||
-          spoken.includes("हिन्दी")
-        ) {
-          languageCode = "hi-IN";
-          greeting = "नमस्ते। वाग्मित्र में आपका स्वागत है।";
-        } else if (spoken.includes("english")) {
-          languageCode = "en-IN";
-          greeting = "Welcome to Vagmitra. Let's get started.";
-        }
-
-        if (!languageCode) {
-          languageStatus.textContent =
-            `I heard "${transcript}". Please try saying English, Hindi or Kannada.`;
-          return;
-        }
-
-        window.VagmitraSpeech.setLanguage(languageCode);
-
-        languageStatus.textContent =
-          `Language selected: ${languageCode}.`;
-
-        window.VagmitraSpeech.speak(
-          greeting,
-          () => renderQuestion(),
-          () => renderQuestion()
-        );
-      },
-      message => {
-        languageStatus.textContent =
-          `${message} Please press Start Voice Assistant and try again.`;
-      },
-      () => {
-        if (languageStatus.textContent.startsWith("Listening")) {
-          languageStatus.textContent =
-            "Listening stopped. Press Start Voice Assistant to try again.";
-        }
-      }
-    );
+  const back = document.getElementById("back-btn");
+  if (back) back.onclick = () => {
+    dialogue.previous();
+    renderQuestion();
   };
+
+  document.getElementById("answer-input").focus();
 }
 
-  function restart(){if(confirm("Start over and clear all entered answers?")){dialogue.reset();uploadedFile=null;status.textContent="A new session has started.";renderLanguageSelection();}}
-document.getElementById("restart-btn").onclick=restart;
-renderLanguageSelection();
+  function restart() {
+  if (confirm("Start over and clear all entered answers?")) {
+    dialogue.reset();
+    uploadedFile = null;
+    status.textContent = "A new session has started.";
+    renderQuestion();
+  }
+}
+
+document.getElementById("restart-btn").onclick = restart;
+renderQuestion();
 })();
