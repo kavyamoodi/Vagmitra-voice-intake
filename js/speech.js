@@ -65,13 +65,14 @@ window.VagmitraSpeech = (() => {
     }
 
     // Match "15/08/2005" or "15-08-2005" (DD/MM/YYYY)
-    const slashMatch = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    const slashMatch = text.trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
     if (slashMatch) {
       const day = slashMatch[1].padStart(2, "0");
       const month = slashMatch[2].padStart(2, "0");
-      return `${slashMatch[3]}-${month}-${day}`;
+      if (Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= 31) {
+        return `${slashMatch[3]}-${month}-${day}`;
+      }
     }
-
     return null;
   }
 
