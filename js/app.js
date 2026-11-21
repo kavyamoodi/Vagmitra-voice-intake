@@ -8,6 +8,8 @@
   const progressCount = document.getElementById("progress-count");
   const stepList = document.getElementById("step-list");
   let uploadedFile = null;
+  let pdfGenerated = false;
+  let reviewJump = false;
   const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const stepTitles = ["Personal details","Contact details","Address","Application","Documents","Review"];
 
@@ -52,7 +54,11 @@
     const error=window.VagmitraValidation.validate(q,value);
     document.getElementById("field-error").textContent=error;
     if(error){input.focus();return;}
-    dialogue.save(value); dialogue.next(); renderQuestion();
+    dialogue.save(value); dialogue.next();
+    /* When the user was sent here from the review screen to correct an
+       answer, the corrected value goes straight back to the review screen. */
+    if(reviewJump){reviewJump=false;renderReview();return;}
+    renderQuestion();
   }
   function startVoice() {
     const q=dialogue.current(), voiceState=document.getElementById("voice-state");
@@ -82,19 +88,67 @@
     document.getElementById("skip-btn").onclick=renderReview;
     document.getElementById("back-btn").onclick=()=>{dialogue.index=questions.length-1;renderQuestion();};
   }
+  /* The review screen reuses the shared review structure from js/validation.js,
+     so the table on screen and the generated PDF always show exactly the same
+     fields, in the same order, with the same validation state. */
   function renderReview() {
-    dialogue.index=questions.length+1; updateProgress();
-    const labels={fullName:"Full name",dateOfBirth:"Date of birth",phone:"Mobile number",email:"Email address",address:"Address",applicationType:"Service / application",purpose:"Reason for application",documentName:"Uploaded file",documentTextExtracted:"PDF text extraction"};
-    const rows=Object.entries(dialogue.answers).filter(([k])=>k!=="documentTextExtracted").map(([k,v])=>`<tr><td>${esc(labels[k]||k)}</td><td>${esc(v||"Not provided")}</td></tr>`).join("");
+    dialogue.index=questions.length+1; reviewJump=false; updateProgress();
+    const result=window.VagmitraValidation.validateAll(dialogue.answers,questions);
+    const rows=result.sections.map(section=>
+      `<tr><td colspan="2"><b>${esc(section.step)}. ${esc(String(section.title||"").toUpperCase())}</b></td></tr>`+
+      section.fields.map(field=>`<tr><td>${esc(field.label)}${field.required||/optional/i.test(field.label)?"":"<br><small>(optional)</small>"}</td><td>${esc(field.display)}${field.valid?"":"<br><small>"+esc(field.message)+"</small>"}</td></tr>`).join("")
+    ).join("");
+    const issues=result.issues.map(issue=>`<li><button type="button" data-goto="${esc(issue.id)}" style="border:0;background:none;color:var(--teal);font:600 11px 'DM Sans';cursor:pointer;padding:0;text-decoration:underline">${esc(issue.label)}</button> — ${esc(issue.message)}</li>`).join("");
     content.innerHTML=header("STEP 6 · REVIEW","Let’s check your answers","Please review every detail. You can go back and make changes before downloading your summary.")+
       `<table class="review-table">${rows||"<tr><td>No answers yet</td></tr>"}</table>
+      ${issues?`<div class="notice" id="review-issues"><b>${esc(result.summary)}</b><ul>${issues}</ul></div>`:""}
+      <div class="notice" id="pdf-note" hidden></div>
       <div class="notice">This is a prototype summary, not an official application or submission. Verify details and submit them only through the relevant official portal.</div>
-      <div class="action-row"><button class="btn btn-primary" id="download-btn">⬇ Download PDF summary</button><button class="btn btn-secondary" id="edit-btn">← Edit answers</button><button class="btn btn-secondary" id="finish-btn">Finish & clear data</button></div>`;
-    document.getElementById("download-btn").onclick=()=>{try{window.VagmitraPdf.download(dialogue.answers);status.textContent="Your PDF summary has been generated.";}catch(e){status.textContent=e.message;}};
-    document.getElementById("edit-btn").onclick=()=>{dialogue.index=0;renderQuestion();};
-    document.getElementById("finish-btn").onclick=()=>{if(confirm("Clear all answers from this session?")){dialogue.reset();uploadedFile=null;status.textContent="Session data cleared.";renderQuestion();}};
+      <div class="action-row"><button class="btn btn-primary" id="download-btn"${result.valid?"":" disabled"}>⬇ Download PDF summary</button><button class="btn btn-secondary" id="edit-btn">← Edit answers</button><button class="btn btn-secondary" id="finish-btn">Finish & clear data</button></div>`;
+    /* Jump straight to the field that needs attention. */
+    [...content.querySelectorAll("[data-goto]")].forEach(button=>{
+      button.onclick=()=>{
+        const id=button.getAttribute("data-goto");
+        const index=questions.findIndex(q=>q.id===id);
+        if(id==="documentName"||id==="documentTextExtracted"){reviewJump=true;dialogue.index=questions.length;renderQuestion();return;}
+        if(index===-1)return;
+        reviewJump=true;dialogue.index=index;renderQuestion();
+      };
+    });
+    /* The application is only generated when every answer passes validation. */
+    document.getElementById("download-btn").onclick=()=>{
+      const check=window.VagmitraValidation.validateAll(dialogue.answers,questions);
+      if(!check.valid){renderReview();showPdfNote(check.summary+" Please use the list above to correct them.");return;}
+      try{
+        const outcome=window.VagmitraPdf.download(dialogue.answers);
+        pdfGenerated=true;
+        showPdfNote(outcome&&outcome.warning?outcome.warning:"Your application has been generated and saved to this device as "+window.VagmitraPdf.fileName+".");
+      }catch(e){showPdfNote(e&&e.message?e.message:"The application could not be generated. Please try again.");}
+    };
+    document.getElementById("edit-btn").onclick=()=>{reviewJump=false;dialogue.index=0;renderQuestion();};
+    document.getElementById("finish-btn").onclick=()=>{if(confirm(clearConfirmation())){clearSessionData();status.textContent="Session data cleared.";renderQuestion();}};
   }
-  function restart(){if(confirm("Start over and clear all entered answers?")){dialogue.reset();uploadedFile=null;status.textContent="A new session has started.";renderQuestion();}}
+  /* Shows a message about the generated document in the review screen. */
+  function showPdfNote(text){
+    const note=document.getElementById("pdf-note");
+    if(note){note.textContent=text;note.hidden=false;}
+    status.textContent=text;
+  }
+  /* Khushi: removes every answer and the uploaded file from memory. Nothing
+     is cleared before the user has had the chance to download the
+     application - the confirmation asks for it. */
+  function clearSessionData(){
+    window.VagmitraPrivacy.clearSession(dialogue);
+    uploadedFile=null;
+    pdfGenerated=false;
+    reviewJump=false;
+  }
+  function clearConfirmation(){
+    return pdfGenerated
+      ? "Your application PDF has been generated. Clear all answers from this session?"
+      : "Clear all answers from this session? Download your application PDF first if you want to keep a copy of it.";
+  }
+  function restart(){if(confirm(clearConfirmation())){clearSessionData();status.textContent="A new session has started.";renderQuestion();}}
   document.getElementById("restart-btn").onclick=restart;
   renderQuestion();
 })();
