@@ -8,6 +8,7 @@
   const progressCount = document.getElementById("progress-count");
   const stepList = document.getElementById("step-list");
   let uploadedFile = null;
+  let confirmationHandled = false;
   const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const stepTitles = ["Personal details","Contact details","Address","Application","Documents","Review"];
 
@@ -43,17 +44,90 @@
     const back = document.getElementById("back-btn"); if(back) back.onclick=()=>{dialogue.previous();renderQuestion();};
     document.getElementById("answer-input").focus();
   }
-  function saveAndContinue() {
-    const q = dialogue.current(), input = document.getElementById("answer-input");
-    let value = input.value;
-    if(q.id==="phone") value=window.VagmitraNormalize.phone(value);
-    if(q.id==="email") value=window.VagmitraNormalize.email(value);
-    if(q.id==="fullName"||q.id==="address") value=window.VagmitraNormalize.whitespace(value);
-    const error=window.VagmitraValidation.validate(q,value);
-    document.getElementById("field-error").textContent=error;
-    if(error){input.focus();return;}
-    dialogue.save(value); dialogue.next(); renderQuestion();
+  
+  function showConfirmation(q, value) {
+    dialogue.save(value);
+    confirmationHandled = false;
+
+    content.innerHTML = header(
+      "CONFIRM YOUR ANSWER",
+      "Is this correct?",
+      "Please check the answer before moving to the next question."
+    ) +
+      `<div class="question-card">
+        <label>${esc(q.label)}</label>
+        <p>${esc(value || "Not provided")}</p>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-primary" id="confirm-answer-btn">Confirm</button>
+        <button class="btn btn-secondary" id="edit-answer-btn">Edit answer</button>
+      </div>
+      <div class="voice-state" id="confirmation-status">
+        You can say Yes or No, or use the buttons.
+      </div>`;
+
+    document.getElementById("confirm-answer-btn").onclick =
+    () => finishConfirmation(value, true);
+
+    document.getElementById("edit-answer-btn").onclick =
+    () => finishConfirmation(value, false);
+
+    window.VagmitraSpeech.confirmAnswer(q.label, value, {
+      onConfirmed: () => finishConfirmation(value, true),
+      onRejected: () => finishConfirmation(value, false),
+      onUnclear: transcript => {
+        if (!confirmationHandled) {
+          document.getElementById("confirmation-status").textContent =
+            `Heard: "${transcript}". Please say Yes or No, or use a button.`;
+        }
+      },
+      onError: message => {
+        if (!confirmationHandled) {
+          document.getElementById("confirmation-status").textContent =
+            `${message} You can use the buttons instead.`;
+        }
+      }
+    });
   }
+
+  function finishConfirmation(value, confirmed) {
+    if (confirmationHandled) return;
+    confirmationHandled = true;
+
+    window.VagmitraSpeech.stopAll();
+
+   
+    if (confirmed) {
+      dialogue.next();
+      renderQuestion();
+    } else {
+      dialogue.editAnswer(value);
+      renderQuestion();
+    }
+  }
+
+  function saveAndContinue() {
+    const q = dialogue.current();
+    const input = document.getElementById("answer-input");
+    let value = input.value;
+
+    if (q.id === "phone") value = window.VagmitraNormalize.phone(value);
+    if (q.id === "email") value = window.VagmitraNormalize.email(value);
+    if (q.id === "fullName" || q.id === "address") {
+      value = window.VagmitraNormalize.whitespace(value);
+    }
+
+    const error = window.VagmitraValidation.validate(q, value);
+    document.getElementById("field-error").textContent = error;
+
+    if (error) {
+      input.focus();
+      return;
+    }
+
+    showConfirmation(q, value);
+  }
+
   function startVoice() {
     const q=dialogue.current(), voiceState=document.getElementById("voice-state");
     voiceState.textContent="Listening… Please speak clearly.";
@@ -65,36 +139,265 @@
       } else { input.value=transcript; voiceState.textContent=`Heard: “${transcript}”. Please check it before continuing.`; }
     }, message=>voiceState.textContent=message, ()=>{if(voiceState.textContent==="Listening… Please speak clearly.")voiceState.textContent="Listening stopped.";});
   }
-  function renderDocuments() {
-    updateProgress();
-    content.innerHTML=header("STEP 5 · DOCUMENTS","Do you have a supporting document?","This step is optional. You can upload a PDF for local text extraction, or skip it and continue.")+
-      `<div class="upload-box"><div style="font-size:27px">📄</div><b style="font-size:13px">Upload a PDF document</b><p class="step-description" style="margin:7px 0 14px">Choose a file from your device. It is processed in this browser only.</p><input type="file" id="document-input" accept="application/pdf"><div id="file-status" class="file-list"></div></div>
-      <div class="notice">Do not upload sensitive documents to this public prototype. The project currently has no DigiLocker connection. Only use sample or test documents.</div>
-      <div class="action-row"><button class="btn btn-primary" id="review-btn">Continue to review →</button><button class="btn btn-secondary" id="skip-btn">Skip this step</button><button class="btn btn-secondary" id="back-btn">← Back</button></div>`;
-    document.getElementById("document-input").onchange=async e=>{
-      uploadedFile=e.target.files[0]; const out=document.getElementById("file-status");
-      if(!uploadedFile)return;
-      out.textContent=`Selected: ${uploadedFile.name}. Extracting text…`;
-      try { const text=await window.VagmitraDocument.extractPdf(uploadedFile); dialogue.answers.documentName=uploadedFile.name; dialogue.answers.documentTextExtracted=text?"Yes":"No readable text found"; out.textContent=`${uploadedFile.name} — ${text.length} characters extracted. No data was uploaded.`; }
-      catch(err){out.textContent=err.message;uploadedFile=null;}
-    };
-    document.getElementById("review-btn").onclick=renderReview;
-    document.getElementById("skip-btn").onclick=renderReview;
-    document.getElementById("back-btn").onclick=()=>{dialogue.index=questions.length-1;renderQuestion();};
-  }
-  function renderReview() {
-    dialogue.index=questions.length+1; updateProgress();
-    const labels={fullName:"Full name",dateOfBirth:"Date of birth",phone:"Mobile number",email:"Email address",address:"Address",applicationType:"Service / application",purpose:"Reason for application",documentName:"Uploaded file",documentTextExtracted:"PDF text extraction"};
-    const rows=Object.entries(dialogue.answers).filter(([k])=>k!=="documentTextExtracted").map(([k,v])=>`<tr><td>${esc(labels[k]||k)}</td><td>${esc(v||"Not provided")}</td></tr>`).join("");
-    content.innerHTML=header("STEP 6 · REVIEW","Let’s check your answers","Please review every detail. You can go back and make changes before downloading your summary.")+
-      `<table class="review-table">${rows||"<tr><td>No answers yet</td></tr>"}</table>
-      <div class="notice">This is a prototype summary, not an official application or submission. Verify details and submit them only through the relevant official portal.</div>
-      <div class="action-row"><button class="btn btn-primary" id="download-btn">⬇ Download PDF summary</button><button class="btn btn-secondary" id="edit-btn">← Edit answers</button><button class="btn btn-secondary" id="finish-btn">Finish & clear data</button></div>`;
-    document.getElementById("download-btn").onclick=()=>{try{window.VagmitraPdf.download(dialogue.answers);status.textContent="Your PDF summary has been generated.";}catch(e){status.textContent=e.message;}};
-    document.getElementById("edit-btn").onclick=()=>{dialogue.index=0;renderQuestion();};
-    document.getElementById("finish-btn").onclick=()=>{if(confirm("Clear all answers from this session?")){dialogue.reset();uploadedFile=null;status.textContent="Session data cleared.";renderQuestion();}};
-  }
-  function restart(){if(confirm("Start over and clear all entered answers?")){dialogue.reset();uploadedFile=null;status.textContent="A new session has started.";renderQuestion();}}
-  document.getElementById("restart-btn").onclick=restart;
-  renderQuestion();
+  
+function renderDocuments() {
+  updateProgress();
+
+  content.innerHTML =
+    header(
+      "STEP 5 · DOCUMENTS",
+      "Do you have a supporting document?",
+      "This step is optional. You can upload a PDF for local text extraction, or skip it and continue."
+    ) +
+    `<div class="upload-box">
+      <div style="font-size:27px">📄</div>
+      <b style="font-size:13px">Upload a PDF document</b>
+      <p class="step-description" style="margin:7px 0 14px">
+        Choose a file from your device. It is processed in this browser only.
+      </p>
+      <input type="file" id="document-input" accept="application/pdf">
+      <div id="file-status" class="file-list"></div>
+    </div>
+
+    <div class="notice">
+      Do not upload sensitive documents to this public prototype.
+      The project currently has no DigiLocker connection.
+      Only use sample or test documents.
+    </div>
+
+    <div class="action-row">
+      <button class="btn btn-secondary" id="read-doc-instructions">
+        🔊 Read instructions
+      </button>
+      <button class="btn btn-primary" id="review-btn">
+        Continue to review →
+      </button>
+      <button class="btn btn-secondary" id="skip-btn">
+        Skip this step
+      </button>
+      <button class="btn btn-secondary" id="back-btn">
+        ← Back
+      </button>
+    </div>`;
+
+  // Read document instructions aloud
+  document.getElementById("read-doc-instructions").onclick = () => {
+    window.VagmitraSpeech.speak(
+      "Do you have a supporting document? You can upload a PDF document or skip this step. Please do not upload sensitive personal documents."
+    );
+  };
+
+  // Process uploaded PDF
+  document.getElementById("document-input").onchange = async e => {
+    uploadedFile = e.target.files[0];
+    const out = document.getElementById("file-status");
+
+    if (!uploadedFile) return;
+
+    out.textContent = "Extracting PDF text. Please wait...";
+
+    try {
+      const text = await window.VagmitraDocument.extractPdf(uploadedFile);
+
+      dialogue.answers.documentName = uploadedFile.name;
+      dialogue.answers.documentTextExtracted =
+        text ? "Yes" : "No readable text found";
+
+      if (text) {
+        out.textContent =
+          `${uploadedFile.name} — ${text.length} characters extracted. No data was uploaded.`;
+
+        window.VagmitraSpeech.speak(
+          "Your document was uploaded successfully. Its text has been read."
+        );
+      } else {
+        out.textContent =
+          "No readable text found in this PDF. Try another PDF.";
+
+        window.VagmitraSpeech.speak(
+          "The PDF was uploaded, but no readable text was found. Please try another PDF."
+        );
+      }
+
+    } catch (err) {
+      out.textContent = err.message;
+      uploadedFile = null;
+
+      window.VagmitraSpeech.speak(
+        "Sorry, I could not read this PDF. Please try another PDF or skip this step."
+      );
+    }
+  };
+
+  document.getElementById("review-btn").onclick = renderReview;
+  document.getElementById("skip-btn").onclick = renderReview;
+
+  document.getElementById("back-btn").onclick = () => {
+    dialogue.index = questions.length - 1;
+    renderQuestion();
+  };
+}
+
+  
+function renderReview() {
+  dialogue.index = questions.length + 1;
+  updateProgress();
+
+  const labels = {
+    fullName: "Full name",
+    dateOfBirth: "Date of birth",
+    phone: "Mobile number",
+    email: "Email address",
+    address: "Address",
+    applicationType: "Service or application",
+    purpose: "Reason for application",
+    documentName: "Uploaded file",
+    documentTextExtracted: "PDF text extraction"
+  };
+
+  const rows = Object.entries(dialogue.answers)
+    .filter(([k]) => k !== "documentTextExtracted")
+    .map(([k, v]) =>
+      `<tr><td>${esc(labels[k] || k)}</td><td>${esc(v || "Not provided")}</td></tr>`
+    ).join("");
+
+  content.innerHTML =
+    header(
+      "STEP 6 · REVIEW",
+      "Let’s check your answers",
+      "Please review every detail. You can go back and make changes before downloading your summary."
+    ) +
+    `<table class="review-table">${rows || "<tr><td>No answers yet</td></tr>"}</table>
+    <div class="notice">This is a prototype summary, not an official application or submission. Verify details and submit them only through the relevant official portal.</div>
+    <div class="action-row">
+      <button class="btn btn-secondary" id="read-review-btn">🔊 Read answers aloud</button>
+      <button class="btn btn-primary" id="download-btn">⬇ Download PDF summary</button>
+      <button class="btn btn-secondary" id="edit-btn">← Edit answers</button>
+      <button class="btn btn-secondary" id="finish-btn">Finish & clear data</button>
+    </div>`;
+
+  // Automatically announce the Review step
+  window.VagmitraSpeech?.speak?.(
+    "You have reached the review step. Please check your answers. You can listen to your answers, edit them, or download your PDF summary."
+  );
+
+  // Read all answers aloud when requested
+  document.getElementById("read-review-btn").onclick = () => {
+    const spokenReview = Object.entries(dialogue.answers)
+      .filter(([k]) => k !== "documentTextExtracted")
+      .map(([k, v]) =>
+        `${labels[k] || k}: ${v || "Not provided"}`
+      ).join(". ");
+
+    window.VagmitraSpeech?.speak?.(
+      "Here are your answers. " + spokenReview
+    );
+  };
+
+  document.getElementById("download-btn").onclick = () => {
+    try {
+      window.VagmitraPdf.download(dialogue.answers);
+      status.textContent = "Your PDF summary has been generated.";
+    } catch (e) {
+      status.textContent = e.message;
+    }
+  };
+
+  document.getElementById("edit-btn").onclick = () => {
+    dialogue.index = 0;
+    renderQuestion();
+  };
+
+  document.getElementById("finish-btn").onclick = () => {
+    if (confirm("Clear all answers from this session?")) {
+      dialogue.reset();
+      uploadedFile = null;
+      status.textContent = "Session data cleared.";
+      renderQuestion();
+    }
+  };
+}
+  
+function renderLanguageSelection() {
+  content.innerHTML =
+    header(
+      "WELCOME TO VAGMITRA",
+      "Which language would you like to use?",
+      "You can speak English, Hindi or Kannada to choose your language."
+    ) +
+    `<div class="question-card">
+      <p>Say one of these languages:</p>
+      <p><strong>English, Hindi or Kannada</strong></p>
+    </div>
+    <div class="action-row">
+      <button class="btn btn-primary" id="start-language-btn">
+        Start Voice Assistant
+      </button>
+    </div>
+    <div class="voice-state" id="language-status">
+      Press Start Voice Assistant and speak your choice.
+    </div>`;
+
+  document.getElementById("start-language-btn").onclick = () => {
+    const languageStatus = document.getElementById("language-status");
+    languageStatus.textContent = "Listening... Please say English, Hindi or Kannada.";
+
+    window.VagmitraSpeech.listen(
+      transcript => {
+        const spoken = transcript.toLowerCase().trim();
+        let languageCode = "";
+        let greeting = "";
+
+        if (
+          spoken.includes("kannada") ||
+          spoken.includes("ಕನ್ನಡ")
+        ) {
+          languageCode = "kn-IN";
+          greeting = "ವಂದನೆಗಳು. ವಾಗ್ಮಿತ್ರಕ್ಕೆ ಸ್ವಾಗತ.";
+        } else if (
+          spoken.includes("hindi") ||
+          spoken.includes("हिंदी") ||
+          spoken.includes("हिन्दी")
+        ) {
+          languageCode = "hi-IN";
+          greeting = "नमस्ते। वाग्मित्र में आपका स्वागत है।";
+        } else if (spoken.includes("english")) {
+          languageCode = "en-IN";
+          greeting = "Welcome to Vagmitra. Let's get started.";
+        }
+
+        if (!languageCode) {
+          languageStatus.textContent =
+            `I heard "${transcript}". Please try saying English, Hindi or Kannada.`;
+          return;
+        }
+
+        window.VagmitraSpeech.setLanguage(languageCode);
+
+        languageStatus.textContent =
+          `Language selected: ${languageCode}.`;
+
+        window.VagmitraSpeech.speak(
+          greeting,
+          () => renderQuestion(),
+          () => renderQuestion()
+        );
+      },
+      message => {
+        languageStatus.textContent =
+          `${message} Please press Start Voice Assistant and try again.`;
+      },
+      () => {
+        if (languageStatus.textContent.startsWith("Listening")) {
+          languageStatus.textContent =
+            "Listening stopped. Press Start Voice Assistant to try again.";
+        }
+      }
+    );
+  };
+}
+
+  function restart(){if(confirm("Start over and clear all entered answers?")){dialogue.reset();uploadedFile=null;status.textContent="A new session has started.";renderLanguageSelection();}}
+document.getElementById("restart-btn").onclick=restart;
+renderLanguageSelection();
 })();
