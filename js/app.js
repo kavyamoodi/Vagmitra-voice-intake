@@ -52,7 +52,9 @@
     const error=window.VagmitraValidation.validate(q,value);
     document.getElementById("field-error").textContent=error;
     if(error){input.focus();return;}
-    dialogue.save(value); dialogue.next(); renderQuestion();
+    dialogue.save(value); 
+    window.VagmitraSpeech.speak(
+  `You entered ${value}. Moving to the next question.`); dialogue.next(); renderQuestion();
   }
   function startVoice() {
     const q=dialogue.current(), voiceState=document.getElementById("voice-state");
