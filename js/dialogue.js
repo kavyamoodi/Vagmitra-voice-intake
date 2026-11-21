@@ -1,4 +1,4 @@
-/* Katyayani: simple one-question-at-a-time dialogue controller. */
+/* Katyayani: Dialogue Management Module */
 
 window.VagmitraDialogue = class {
 
@@ -7,8 +7,15 @@ window.VagmitraDialogue = class {
     this.index = 0;
     this.answers = {};
 
-    // Dialogue state machine
-    this.state = "asking";
+    // Dialogue State Machine
+    this.STATES = {
+      ASKING: "asking",
+      LISTENING: "listening",
+      CONFIRMING: "confirming",
+      COMPLETED: "completed"
+    };
+
+    this.state = this.STATES.ASKING;
   }
 
   current() {
@@ -20,7 +27,7 @@ window.VagmitraDialogue = class {
 
     if (q) {
       this.answers[q.id] = value;
-      this.state = "confirming";
+      this.state = this.STATES.CONFIRMING;
     }
   }
 
@@ -30,7 +37,11 @@ window.VagmitraDialogue = class {
       this.index++;
     }
 
-    this.state = "asking";
+    if (this.index >= this.questions.length) {
+      this.state = this.STATES.COMPLETED;
+    } else {
+      this.state = this.STATES.ASKING;
+    }
 
     return this.current();
   }
@@ -41,15 +52,9 @@ window.VagmitraDialogue = class {
       this.index--;
     }
 
-    this.state = "asking";
+    this.state = this.STATES.ASKING;
 
     return this.current();
-  }
-
-  reset() {
-    this.index = 0;
-    this.answers = {};
-    this.state = "asking";
   }
 
   repeatQuestion() {
@@ -62,11 +67,12 @@ window.VagmitraDialogue = class {
 
     if (q) {
       this.answers[q.id] = value;
+      this.state = this.STATES.ASKING;
     }
   }
 
-  getAnswer(id) {
-    return this.answers[id] || "";
+  getAnswer(questionId) {
+    return this.answers[questionId] || "";
   }
 
   getAllAnswers() {
@@ -81,8 +87,13 @@ window.VagmitraDialogue = class {
     this.state = state;
   }
 
+  reset() {
+    this.index = 0;
+    this.answers = {};
+    this.state = this.STATES.ASKING;
+  }
+
   get progress() {
     return this.index / (this.questions.length + 1);
   }
-
 };
