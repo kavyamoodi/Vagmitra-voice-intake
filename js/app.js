@@ -93,15 +93,20 @@
   function finishConfirmation(value, confirmed) {
     if (confirmationHandled) return;
     confirmationHandled = true;
+      try {
+    window.VagmitraSpeech?.stopAll?.();
+  } catch (error) {
+    console.warn("Could not stop speech:", error);
+  }
 
-    window.VagmitraSpeech.stopAll();
+    //window.VagmitraSpeech.stopAll();
 
    
     if (confirmed) {
       dialogue.next();
       renderQuestion();
     } else {
-      dialogue.editAnswer(value);
+     // dialogue.editAnswer(value);
       renderQuestion();
     }
   }
