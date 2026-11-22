@@ -376,7 +376,8 @@ function renderQuestion() {
     dialogue.previous();
     renderQuestion();
   };
-
+  window.VagmitraSpeech.speak(q.prompt);
+  document.getElementById("answer-input").focus();
   document.getElementById("answer-input").focus();
 }
 
